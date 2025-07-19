@@ -2,68 +2,30 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
 
-	"github.com/WasathTheekshana/tedo/internal/models"
-	"github.com/WasathTheekshana/tedo/internal/storage"
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/WasathTheekshana/tedo/internal/ui"
 )
 
 func main() {
-	fmt.Println("---------------------------------------------------------")
+	// Create the application model
+	model := ui.NewModel()
 
-	fmt.Println("Tedo - Testing Storage")
+	// Add some test data for development
+	model.AddTestData()
 
-	repo := storage.NewRepository()
-	today := models.TodayString()
+	// Create the Bubble Tea program
+	p := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),       // Use alternate screen buffer
+		tea.WithMouseCellMotion(), // Enable mouse support
+	)
 
-	// Test adding todos
-	generalTodo := models.NewTodo("Learn Go Patterns", "Study design patterns in Go", nil)
-	todayTodo := models.NewTodo("Code Review", "Review PR #123", &today)
-
-	fmt.Println("Adding todos...")
-	if err := repo.AddTodo(generalTodo); err != nil {
-		log.Fatalf("Failed to add general todo: %v", err)
+	// Run the program
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Error running program: %v\n", err)
+		os.Exit(1)
 	}
-
-	if err := repo.AddTodo(todayTodo); err != nil {
-		log.Fatalf("Failed to add today's todo: %v", err)
-	}
-
-	// Test loading todos
-	fmt.Println("\nLoading general todos...")
-	generalTodos, err := repo.GetGeneralTodos()
-	if err != nil {
-		log.Fatalf("Failed to load general todos: %v", err)
-	}
-	fmt.Printf("Found %d general todos\n", len(generalTodos))
-	for _, todo := range generalTodos {
-		fmt.Printf("- %s: %s (Completed: %v)\n", todo.Title, todo.Description, todo.Completed)
-	}
-
-	fmt.Println("\nLoading today's todos...")
-	todayTodos, err := repo.GetTodosForDate(today)
-	if err != nil {
-		log.Fatalf("Failed to load today's todos: %v", err)
-	}
-	fmt.Printf("Found %d todos for %s\n", len(todayTodos), today)
-	for _, todo := range todayTodos {
-		fmt.Printf("- %s: %s (Completed: %v)\n", todo.Title, todo.Description, todo.Completed)
-	}
-
-	// Test toggle and update
-	if len(todayTodos) > 0 {
-		fmt.Println("\nToggling first todo...")
-		todayTodos[0].Toggle()
-		if err := repo.UpdateTodo(todayTodos[0]); err != nil {
-			log.Fatalf("Failed to update todo: %v", err)
-		}
-		fmt.Printf("Todo '%s' is now completed: %v\n", todayTodos[0].Title, todayTodos[0].Completed)
-	}
-
-	// Test count
-	count, err := repo.GetTodoCountForDate(today)
-	if err != nil {
-		log.Fatalf("Failed to get todo count: %v", err)
-	}
-	fmt.Printf("\nTotal todos for %s: %d\n", today, count)
 }

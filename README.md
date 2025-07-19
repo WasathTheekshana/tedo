@@ -6,6 +6,12 @@ A beautiful, interactive command-line todo application built with Go and Bubble 
 ![Go Version](https://img.shields.io/badge/go-%3E%3D1.19-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)
 
+---
+
+<img width="1609" height="472" alt="image" src="https://github.com/user-attachments/assets/6f15cbf3-a85a-4a6c-95a8-b19a90cbee08" />
+<img width="1697" height="720" alt="image" src="https://github.com/user-attachments/assets/d688f4ae-9933-46c5-a507-b17351adc668" />
+
+
 ## ✨ Features
 
 ### 🎯 **Smart Todo Organization**
@@ -32,7 +38,14 @@ A beautiful, interactive command-line todo application built with Go and Bubble 
 - No external database required
 - Human-readable data format
 
-### 🎨 **Beautiful Interface**
+### Enhanced Features ✨
+- **Smart Input Validation**: Character limits and real-time feedback
+- **Auto-clearing Errors**: Error messages disappear after 5 seconds
+- **Enhanced Keyboard Shortcuts**: `Ctrl+S` to save, `Ctrl+A` select all
+- **Performance Optimized**: Handles 1000+ todos efficiently
+- **Character Counters**: Live character count in input forms
+- **Version Information**: `tedo -version` for version details
+- **Help System**: `tedo -help` for usage information
 - Clean, modern terminal UI
 - Color-coded todo states
 - Pagination for large todo lists
@@ -42,28 +55,41 @@ A beautiful, interactive command-line todo application built with Go and Bubble 
 
 ### Installation
 
-#### Option 1: Install from source
-```bash
-# Clone the repository
-git clone https://github.com/WasathTheekshana/Tedo.git
-cd Tedo
+## 🚀 Installation
 
-# Build and install
+### Method 1: Go Install (Recommended)
+```bash
+go install github.com/WasathTheekshana/tedo/cmd/tedo@latest
+```
+
+### Method 2: Using Installation Script
+```bash
+curl -fsSL https://raw.githubusercontent.com/WasathTheekshana/tedo/main/install.sh | bash
+```
+
+### Method 3: From Source
+```bash
+git clone https://github.com/WasathTheekshana/tedo.git
+cd tedo
 go build -o tedo cmd/tedo/main.go
 sudo mv tedo /usr/local/bin/
-
-# Or just run directly
-go run cmd/tedo/main.go
 ```
 
-#### Option 2: Go install (if published)
+### Verify Installation
 ```bash
-go install github.com/WasathTheekshana/Tedo/cmd/tedo@latest
+tedo -version
 ```
 
-### First Run
+**Note:** Make sure `$GOPATH/bin` is in your `$PATH`. Add this to your shell profile if needed:
 ```bash
-tedo
+export PATH=$PATH:$(go env GOPATH)/bin
+```
+
+### Command Line Options
+```bash
+tedo                # Start the application
+tedo -version       # Show version information  
+tedo -help          # Show help message
 ```
 
 The app will create a `data/` directory in the current folder to store your todos.
@@ -96,6 +122,13 @@ The app will create a `data/` directory in the current folder to store your todo
 | `Enter` / `Ctrl+S` | Save todo |
 | `Esc` | Cancel |
 | `Ctrl+A` | Select all text |
+| `Ctrl+C` | Quit application |
+
+**Input Validation:**
+- Title: Required, max 100 characters
+- Description: Optional, max 500 characters  
+- Real-time character counting
+- Auto-clearing error messages
 
 ### 📅 **Calendar Navigation**
 | Key | Action |
@@ -114,12 +147,13 @@ The app will create a `data/` directory in the current folder to store your todo
 ## 🏗️ Project Structure
 
 ```
-Tedo/
+tedo/
 ├── cmd/tedo/           # Application entry point
 │   └── main.go
 ├── internal/           # Private application code
 │   ├── models/         # Data structures
 │   ├── storage/        # JSON persistence layer
+│   ├── version/        # Version information
 │   └── ui/             # Terminal user interface
 │       ├── app.go      # Main application logic
 │       ├── calendar.go # Calendar component
@@ -128,10 +162,15 @@ Tedo/
 │       ├── styles.go   # Visual styling
 │       ├── input.go    # Input handling
 │       ├── validation.go # Input validation
-│       └── errors.go   # Error management
+│       ├── errors.go   # Error management
+│       ├── performance.go # Performance monitoring
+│       └── help.go     # Help system
+├── install.sh          # Installation script
+├── uninstall.sh        # Uninstallation script
 ├── data/               # JSON data files (auto-created)
 ├── go.mod
 ├── go.sum
+├── LICENSE
 └── README.md
 ```
 
@@ -172,6 +211,31 @@ j/k: navigate • ←/→: switch tabs • x: toggle • d: delete • e: edit �
   ☐ Team Meeting
 
 h/j/k/l: navigate dates • n/p: month • t: today • enter: view date • i: add • q: quit
+```
+
+## 🗑️ Uninstallation
+
+### Quick Uninstall
+```bash
+# Remove Tedo binary from Go installation
+rm $(go env GOPATH)/bin/tedo
+
+# Or remove from system location
+sudo rm /usr/local/bin/tedo
+```
+
+### Complete Uninstall Script
+```bash
+curl -fsSL https://raw.githubusercontent.com/WasathTheekshana/tedo/main/uninstall.sh | bash
+```
+
+### Manual Cleanup
+```bash
+# Remove binary from all possible locations
+sudo rm -f /usr/local/bin/tedo /usr/bin/tedo ~/.local/bin/tedo ~/bin/tedo $(go env GOPATH)/bin/tedo
+
+# Optionally remove your todo data
+rm -rf ./data
 ```
 
 ## ⚙️ Configuration

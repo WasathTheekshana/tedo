@@ -30,6 +30,9 @@ type Model struct {
 	selectedDate string // Currently selected date (YYYY-MM-DD)
 	cursor       int    // Current cursor position in lists
 
+	// Input state
+	inputState InputState
+
 	// UI state
 	width  int
 	height int
@@ -52,6 +55,7 @@ func NewModel() Model {
 		generalTodos: generalTodos,
 		selectedDate: today,
 		cursor:       0,
+		inputState:   NewInputState(),
 	}
 }
 
@@ -79,6 +83,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress processes keyboard input
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle input mode first
+	if m.inputState.mode != NavigationMode {
+		return m.handleInputMode(msg)
+	}
+
+	// Global navigation keys
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -110,6 +120,93 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleGeneralViewKeys(msg)
 	}
 
+	return m, nil
+}
+
+// handleInputMode handles keys when in input mode
+func (m Model) handleInputMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.inputState.ExitInputMode()
+		return m, nil
+	case "enter":
+		return m.handleSaveTodo()
+	case "tab":
+		m.inputState.SwitchField()
+		return m, nil
+	default:
+		m.inputState.HandleInput(msg.String())
+		return m, nil
+	}
+}
+
+// handleSaveTodo saves the current input as a todo
+func (m Model) handleSaveTodo() (tea.Model, tea.Cmd) {
+	if !m.inputState.IsValid() {
+		m.err = fmt.Errorf("title is required")
+		return m, nil
+	}
+
+	switch m.inputState.mode {
+	case AddTodoMode:
+		return m.saveNewTodo()
+	case EditTodoMode:
+		return m.saveEditedTodo()
+	}
+
+	return m, nil
+}
+
+// saveNewTodo creates and saves a new todo
+func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
+	var date *string
+	if m.currentView == TodayView {
+		date = &m.selectedDate
+	}
+	// For GeneralView, date remains nil
+
+	newTodo := models.NewTodo(m.inputState.title, m.inputState.description, date)
+
+	if err := m.repository.AddTodo(newTodo); err != nil {
+		m.err = err
+		return m, nil
+	}
+
+	// Reload the appropriate todo list
+	if date != nil {
+		m.todayTodos, _ = m.repository.GetTodosForDate(*date)
+	} else {
+		m.generalTodos, _ = m.repository.GetGeneralTodos()
+	}
+
+	m.inputState.ExitInputMode()
+	return m, nil
+}
+
+// saveEditedTodo updates an existing todo
+func (m Model) saveEditedTodo() (tea.Model, tea.Cmd) {
+	if m.inputState.editingTodo == nil {
+		m.err = fmt.Errorf("no todo being edited")
+		return m, nil
+	}
+
+	// Update the todo
+	m.inputState.editingTodo.Title = m.inputState.title
+	m.inputState.editingTodo.Description = m.inputState.description
+
+	if err := m.repository.UpdateTodo(*m.inputState.editingTodo); err != nil {
+		m.err = err
+		return m, nil
+	}
+
+	// Reload the appropriate todo list
+	if m.inputState.editingTodo.IsGeneral() {
+		m.generalTodos, _ = m.repository.GetGeneralTodos()
+	} else {
+		m.todayTodos, _ = m.repository.GetTodosForDate(*m.inputState.editingTodo.Date)
+	}
+
+	m.inputState.ExitInputMode()
 	return m, nil
 }
 

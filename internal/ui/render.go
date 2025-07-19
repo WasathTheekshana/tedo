@@ -56,6 +56,8 @@ func (m Model) renderTodayView() string {
 		return m.renderInputForm()
 	}
 
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
 	if len(m.todayTodos) == 0 {
 		return baseStyle.Render(
 			fmt.Sprintf("📅 %s\n\nNo todos for today!\n\nPress 'i' to add a new todo.", m.selectedDate),
@@ -63,9 +65,17 @@ func (m Model) renderTodayView() string {
 	}
 
 	var items []string
-	items = append(items, fmt.Sprintf("📅 %s\n", m.selectedDate))
 
-	for i, todo := range m.todayTodos {
+	// Header with pagination info
+	header := fmt.Sprintf("📅 %s", m.selectedDate)
+	if totalPages > 1 {
+		header += fmt.Sprintf(" (Page %d/%d - %d total)", currentPage+1, totalPages, len(m.todayTodos))
+	} else {
+		header += fmt.Sprintf(" (%d todos)", len(m.todayTodos))
+	}
+	items = append(items, header+"\n")
+
+	for i, todo := range paginatedTodos {
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"
@@ -82,12 +92,20 @@ func (m Model) renderTodayView() string {
 			style = selectedItemStyle
 		}
 
-		line := fmt.Sprintf("%s %s %s", cursor, checkbox, todo.Title)
+		// Show absolute index
+		absoluteIndex := currentPage*TodosPerPage + i + 1
+		line := fmt.Sprintf("%s %s %d. %s", cursor, checkbox, absoluteIndex, todo.Title)
 		if todo.Description != "" {
-			line += fmt.Sprintf("\n    %s", todo.Description)
+			line += fmt.Sprintf("\n      %s", todo.Description)
 		}
 
 		items = append(items, style.Render(line))
+	}
+
+	// Add pagination help if needed
+	if totalPages > 1 {
+		items = append(items, "")
+		items = append(items, mutedStyle.Render("Navigation: j/k=item, Ctrl+f/b=page"))
 	}
 
 	return baseStyle.Render(strings.Join(items, "\n"))
@@ -105,14 +123,24 @@ func (m Model) renderGeneralView() string {
 		return m.renderInputForm()
 	}
 
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
 	if len(m.generalTodos) == 0 {
 		return baseStyle.Render("📝 General Todos\n\nNo general todos!\n\nPress 'i' to add a new todo.")
 	}
 
 	var items []string
-	items = append(items, "📝 General Todos\n")
 
-	for i, todo := range m.generalTodos {
+	// Header with pagination info
+	header := "📝 General Todos"
+	if totalPages > 1 {
+		header += fmt.Sprintf(" (Page %d/%d - %d total)", currentPage+1, totalPages, len(m.generalTodos))
+	} else {
+		header += fmt.Sprintf(" (%d todos)", len(m.generalTodos))
+	}
+	items = append(items, header+"\n")
+
+	for i, todo := range paginatedTodos {
 		cursor := " "
 		if i == m.cursor {
 			cursor = ">"
@@ -129,12 +157,20 @@ func (m Model) renderGeneralView() string {
 			style = selectedItemStyle
 		}
 
-		line := fmt.Sprintf("%s %s %s", cursor, checkbox, todo.Title)
+		// Show absolute index
+		absoluteIndex := currentPage*TodosPerPage + i + 1
+		line := fmt.Sprintf("%s %s %d. %s", cursor, checkbox, absoluteIndex, todo.Title)
 		if todo.Description != "" {
-			line += fmt.Sprintf("\n    %s", todo.Description)
+			line += fmt.Sprintf("\n      %s", todo.Description)
 		}
 
 		items = append(items, style.Render(line))
+	}
+
+	// Add pagination help if needed
+	if totalPages > 1 {
+		items = append(items, "")
+		items = append(items, mutedStyle.Render("Navigation: j/k=item, Ctrl+f/b=page"))
 	}
 
 	return baseStyle.Render(strings.Join(items, "\n"))

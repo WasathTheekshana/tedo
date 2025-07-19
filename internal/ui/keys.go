@@ -4,14 +4,35 @@ import tea "github.com/charmbracelet/bubbletea"
 
 // handleTodayViewKeys handles keys specific to today view
 func (m Model) handleTodayViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
 	switch msg.String() {
 	case "j", "down":
-		if len(m.todayTodos) > 0 && m.cursor < len(m.todayTodos)-1 {
+		if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos)-1 {
 			m.cursor++
+		} else if len(paginatedTodos) > 0 && m.cursor == len(paginatedTodos)-1 && currentPage < totalPages-1 {
+			// Go to next page
+			m.todayPage++
+			m.cursor = 0
 		}
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
+		} else if m.cursor == 0 && currentPage > 0 {
+			// Go to previous page
+			m.todayPage--
+			newPaginatedTodos, _, _ := m.getPaginatedTodos()
+			m.cursor = len(newPaginatedTodos) - 1
+		}
+	case "ctrl+f", "page_down":
+		if currentPage < totalPages-1 {
+			m.todayPage++
+			m.cursor = 0
+		}
+	case "ctrl+b", "page_up":
+		if currentPage > 0 {
+			m.todayPage--
+			m.cursor = 0
 		}
 	case "x":
 		return m.toggleCurrentTodo(), nil
@@ -34,14 +55,35 @@ func (m Model) handleCalendarViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleGeneralViewKeys handles keys specific to general view
 func (m Model) handleGeneralViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
 	switch msg.String() {
 	case "j", "down":
-		if len(m.generalTodos) > 0 && m.cursor < len(m.generalTodos)-1 {
+		if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos)-1 {
 			m.cursor++
+		} else if len(paginatedTodos) > 0 && m.cursor == len(paginatedTodos)-1 && currentPage < totalPages-1 {
+			// Go to next page
+			m.generalPage++
+			m.cursor = 0
 		}
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
+		} else if m.cursor == 0 && currentPage > 0 {
+			// Go to previous page
+			m.generalPage--
+			newPaginatedTodos, _, _ := m.getPaginatedTodos()
+			m.cursor = len(newPaginatedTodos) - 1
+		}
+	case "ctrl+f", "page_down":
+		if currentPage < totalPages-1 {
+			m.generalPage++
+			m.cursor = 0
+		}
+	case "ctrl+b", "page_up":
+		if currentPage > 0 {
+			m.generalPage--
+			m.cursor = 0
 		}
 	case "x":
 		return m.toggleCurrentGeneralTodo(), nil
@@ -58,10 +100,14 @@ func (m Model) handleGeneralViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // toggleCurrentTodo toggles completion of current today todo
 func (m Model) toggleCurrentTodo() Model {
-	if len(m.todayTodos) > 0 && m.cursor < len(m.todayTodos) {
-		m.todayTodos[m.cursor].Toggle()
-		if err := m.repository.UpdateTodo(m.todayTodos[m.cursor]); err != nil {
-			m.err = err
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.todayTodos) {
+			m.todayTodos[absoluteIndex].Toggle()
+			if err := m.repository.UpdateTodo(m.todayTodos[absoluteIndex]); err != nil {
+				m.err = err
+			}
 		}
 	}
 	return m
@@ -69,10 +115,14 @@ func (m Model) toggleCurrentTodo() Model {
 
 // toggleCurrentGeneralTodo toggles completion of current general todo
 func (m Model) toggleCurrentGeneralTodo() Model {
-	if len(m.generalTodos) > 0 && m.cursor < len(m.generalTodos) {
-		m.generalTodos[m.cursor].Toggle()
-		if err := m.repository.UpdateTodo(m.generalTodos[m.cursor]); err != nil {
-			m.err = err
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.generalTodos) {
+			m.generalTodos[absoluteIndex].Toggle()
+			if err := m.repository.UpdateTodo(m.generalTodos[absoluteIndex]); err != nil {
+				m.err = err
+			}
 		}
 	}
 	return m
@@ -80,35 +130,43 @@ func (m Model) toggleCurrentGeneralTodo() Model {
 
 // editCurrentTodo starts editing the current today todo
 func (m Model) editCurrentTodo() (tea.Model, tea.Cmd) {
-	if len(m.todayTodos) > 0 && m.cursor < len(m.todayTodos) {
-		m.inputState.StartEditMode(&m.todayTodos[m.cursor])
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.todayTodos) {
+			m.inputState.StartEditMode(&m.todayTodos[absoluteIndex])
+		}
 	}
 	return m, nil
 }
 
 // editCurrentGeneralTodo starts editing the current general todo
 func (m Model) editCurrentGeneralTodo() (tea.Model, tea.Cmd) {
-	if len(m.generalTodos) > 0 && m.cursor < len(m.generalTodos) {
-		m.inputState.StartEditMode(&m.generalTodos[m.cursor])
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.generalTodos) {
+			m.inputState.StartEditMode(&m.generalTodos[absoluteIndex])
+		}
 	}
 	return m, nil
 }
 
 // deleteCurrentTodo deletes the current today todo
 func (m Model) deleteCurrentTodo() (tea.Model, tea.Cmd) {
-	if len(m.todayTodos) > 0 && m.cursor < len(m.todayTodos) {
-		todo := m.todayTodos[m.cursor]
-		if err := m.repository.DeleteTodo(todo.ID, todo.Date); err != nil {
-			m.err = err
-			return m, nil
-		}
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.todayTodos) {
+			todo := m.todayTodos[absoluteIndex]
+			if err := m.repository.DeleteTodo(todo.ID, todo.Date); err != nil {
+				m.err = err
+				return m, nil
+			}
 
-		// Reload todos and adjust cursor
-		m.todayTodos, _ = m.repository.GetTodosForDate(m.selectedDate)
-		if m.cursor >= len(m.todayTodos) && len(m.todayTodos) > 0 {
-			m.cursor = len(m.todayTodos) - 1
-		} else if len(m.todayTodos) == 0 {
-			m.cursor = 0
+			// Reload todos and reset pagination
+			m.todayTodos, _ = m.repository.GetTodosForDate(m.selectedDate)
+			m.resetPagination()
 		}
 	}
 	return m, nil
@@ -116,19 +174,19 @@ func (m Model) deleteCurrentTodo() (tea.Model, tea.Cmd) {
 
 // deleteCurrentGeneralTodo deletes the current general todo
 func (m Model) deleteCurrentGeneralTodo() (tea.Model, tea.Cmd) {
-	if len(m.generalTodos) > 0 && m.cursor < len(m.generalTodos) {
-		todo := m.generalTodos[m.cursor]
-		if err := m.repository.DeleteTodo(todo.ID, nil); err != nil {
-			m.err = err
-			return m, nil
-		}
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.generalTodos) {
+			todo := m.generalTodos[absoluteIndex]
+			if err := m.repository.DeleteTodo(todo.ID, nil); err != nil {
+				m.err = err
+				return m, nil
+			}
 
-		// Reload todos and adjust cursor
-		m.generalTodos, _ = m.repository.GetGeneralTodos()
-		if m.cursor >= len(m.generalTodos) && len(m.generalTodos) > 0 {
-			m.cursor = len(m.generalTodos) - 1
-		} else if len(m.generalTodos) == 0 {
-			m.cursor = 0
+			// Reload todos and reset pagination
+			m.generalTodos, _ = m.repository.GetGeneralTodos()
+			m.resetPagination()
 		}
 	}
 	return m, nil

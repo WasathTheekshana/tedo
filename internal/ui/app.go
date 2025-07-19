@@ -19,6 +19,11 @@ const (
 	GeneralView
 )
 
+// Pagination for the app
+const (
+	TodosPerPage = 10
+)
+
 // Model represents the main application state
 type Model struct {
 	currentView ViewType
@@ -29,6 +34,10 @@ type Model struct {
 	generalTodos []models.Todo
 	selectedDate string // Currently selected date (YYYY-MM-DD)
 	cursor       int    // Current cursor position in lists
+
+	// Pagination
+	todayPage   int // Current page for today's todos
+	generalPage int // Current page for general todos
 
 	// Input state
 	inputState InputState
@@ -55,7 +64,94 @@ func NewModel() Model {
 		generalTodos: generalTodos,
 		selectedDate: today,
 		cursor:       0,
+		todayPage:    0,
+		generalPage:  0,
 		inputState:   NewInputState(),
+	}
+}
+
+// getPaginatedTodos returns the todos for the current page
+func (m Model) getPaginatedTodos() ([]models.Todo, int, int) {
+	var todos []models.Todo
+	var currentPage int
+
+	switch m.currentView {
+	case TodayView:
+		todos = m.todayTodos
+		currentPage = m.todayPage
+	case GeneralView:
+		todos = m.generalTodos
+		currentPage = m.generalPage
+	default:
+		return []models.Todo{}, 0, 0
+	}
+
+	totalPages := (len(todos) + TodosPerPage - 1) / TodosPerPage
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	start := currentPage * TodosPerPage
+	end := start + TodosPerPage
+	if end > len(todos) {
+		end = len(todos)
+	}
+
+	if start >= len(todos) {
+		return []models.Todo{}, currentPage, totalPages
+	}
+
+	return todos[start:end], currentPage, totalPages
+}
+
+// getAbsoluteCursor returns the absolute cursor position (across all pages)
+func (m Model) getAbsoluteCursor() int {
+	switch m.currentView {
+	case TodayView:
+		return m.todayPage*TodosPerPage + m.cursor
+	case GeneralView:
+		return m.generalPage*TodosPerPage + m.cursor
+	default:
+		return m.cursor
+	}
+}
+
+// resetPagination resets pagination when todos are modified
+func (m *Model) resetPagination() {
+	switch m.currentView {
+	case TodayView:
+		// Adjust page if current page is now empty
+		totalPages := (len(m.todayTodos) + TodosPerPage - 1) / TodosPerPage
+		if totalPages == 0 {
+			totalPages = 1
+		}
+		if m.todayPage >= totalPages {
+			m.todayPage = totalPages - 1
+		}
+		if m.todayPage < 0 {
+			m.todayPage = 0
+		}
+	case GeneralView:
+		// Adjust page if current page is now empty
+		totalPages := (len(m.generalTodos) + TodosPerPage - 1) / TodosPerPage
+		if totalPages == 0 {
+			totalPages = 1
+		}
+		if m.generalPage >= totalPages {
+			m.generalPage = totalPages - 1
+		}
+		if m.generalPage < 0 {
+			m.generalPage = 0
+		}
+	}
+
+	// Reset cursor to 0 if it's out of bounds for current page
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if m.cursor >= len(paginatedTodos) {
+		m.cursor = 0
+		if len(paginatedTodos) > 0 {
+			m.cursor = len(paginatedTodos) - 1
+		}
 	}
 }
 
@@ -179,6 +275,7 @@ func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
 		m.generalTodos, _ = m.repository.GetGeneralTodos()
 	}
 
+	m.resetPagination()
 	m.inputState.ExitInputMode()
 	return m, nil
 }
@@ -206,6 +303,7 @@ func (m Model) saveEditedTodo() (tea.Model, tea.Cmd) {
 		m.todayTodos, _ = m.repository.GetTodosForDate(*m.inputState.editingTodo.Date)
 	}
 
+	m.resetPagination()
 	m.inputState.ExitInputMode()
 	return m, nil
 }

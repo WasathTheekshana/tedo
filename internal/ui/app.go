@@ -33,27 +33,33 @@ type Model struct {
 
 	// View states
 	todayTodos    []models.Todo
-	upcomingTodos []models.Todo // Add upcoming todos
+	upcomingTodos []models.Todo
 	generalTodos  []models.Todo
-	selectedDate  string // Currently selected date (YYYY-MM-DD)
-	cursor        int    // Current cursor position in lists
+	selectedDate  string
+	cursor        int
 	calendarState CalendarState
 
 	// Pagination
-	todayPage    int // Current page for today's todos
-	upcomingPage int // Current page for upcoming todos
-	generalPage  int // Current page for general todos
+	todayPage    int
+	upcomingPage int
+	generalPage  int
 
 	// Input state
 	inputState InputState
 
+	// Error handling
+	errorState ErrorState
+
 	// UI state
 	width  int
 	height int
-	err    error
+
+	// Performance optimization
+	lastRefresh time.Time
 }
 
 // NewModel creates a new application model
+
 func NewModel() Model {
 	repo := storage.NewRepository()
 	today := models.TodayString()
@@ -76,6 +82,8 @@ func NewModel() Model {
 		upcomingPage:  0,
 		generalPage:   0,
 		inputState:    NewInputState(),
+		errorState:    ErrorState{},
+		lastRefresh:   time.Now(),
 	}
 }
 
@@ -201,10 +209,16 @@ func (m *Model) resetPagination() {
 
 // reloadTodos reloads todos after changes
 func (m *Model) reloadTodos() {
+	// Only reload if significant time has passed or forced
+	if time.Since(m.lastRefresh) < 100*time.Millisecond {
+		return
+	}
+
 	today := models.TodayString()
 	m.todayTodos, _ = m.repository.GetTodosForDate(today)
 	m.upcomingTodos = loadUpcomingTodos(m.repository, today)
 	m.generalTodos, _ = m.repository.GetGeneralTodos()
+	m.lastRefresh = time.Now()
 }
 
 // Init implements tea.Model
@@ -222,7 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m, nil
 	case error:
-		m.err = msg
+		m.errorState.SetErrorMessage("Error while updating")
 		return m, nil
 	}
 
@@ -293,20 +307,26 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleInputMode handles keys when in input mode
 func (m Model) handleInputMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle quit keys even in input mode
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc":
 		m.inputState.ExitInputMode()
+		m.errorState.ClearError() // Clear errors when canceling
 		return m, nil
-	case "enter":
+	case "ctrl+s", "enter":
 		return m.handleSaveTodo()
 	case "tab":
 		m.inputState.SwitchField()
+		m.errorState.ClearError() // Clear errors when switching fields
+		return m, nil
+	case "ctrl+a":
+		// Select all text in current field
+		m.inputState.cursor = len(*m.inputState.getCurrentField())
 		return m, nil
 	default:
 		m.inputState.HandleInput(msg.String())
+		m.errorState.ClearError() // Clear errors when typing
 		return m, nil
 	}
 }
@@ -314,7 +334,7 @@ func (m Model) handleInputMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleSaveTodo saves the current input as a todo
 func (m Model) handleSaveTodo() (tea.Model, tea.Cmd) {
 	if !m.inputState.IsValid() {
-		m.err = fmt.Errorf("title is required")
+		m.errorState.SetErrorMessage("title is required")
 		return m, nil
 	}
 
@@ -329,7 +349,18 @@ func (m Model) handleSaveTodo() (tea.Model, tea.Cmd) {
 }
 
 // saveNewTodo creates and saves a new todo
+
 func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
+	// Clean input
+	title := CleanInput(m.inputState.title)
+	description := CleanInput(m.inputState.description)
+
+	// Validate input
+	if errors := ValidateTodoInput(title, description); len(errors) > 0 {
+		m.errorState.SetErrorMessage(FormatValidationErrors(errors))
+		return m, nil
+	}
+
 	var date *string
 	if m.currentView == TodayView {
 		date = &m.selectedDate
@@ -337,19 +368,18 @@ func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
 		selectedDate := m.calendarState.getSelectedDate()
 		date = &selectedDate
 	} else if m.currentView == UpcomingView {
-		// For upcoming view, ask which date or use selected date
 		date = &m.selectedDate
 	}
-	// For GeneralView, date remains nil
 
-	newTodo := models.NewTodo(m.inputState.title, m.inputState.description, date)
+	newTodo := models.NewTodo(title, description, date)
 
 	if err := m.repository.AddTodo(newTodo); err != nil {
-		m.err = err
+		m.errorState.SetError(fmt.Errorf("failed to save todo: %w", err))
 		return m, nil
 	}
 
-	// Reload all todos to ensure proper categorization
+	// Success - reload and clear error
+	m.errorState.ClearError()
 	m.reloadTodos()
 	m.resetPagination()
 	m.inputState.ExitInputMode()
@@ -359,20 +389,31 @@ func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
 // saveEditedTodo updates an existing todo
 func (m Model) saveEditedTodo() (tea.Model, tea.Cmd) {
 	if m.inputState.editingTodo == nil {
-		m.err = fmt.Errorf("no todo being edited")
+		m.errorState.SetErrorMessage("No todo being edited")
+		return m, nil
+	}
+
+	// Clean input
+	title := CleanInput(m.inputState.title)
+	description := CleanInput(m.inputState.description)
+
+	// Validate input
+	if errors := ValidateTodoInput(title, description); len(errors) > 0 {
+		m.errorState.SetErrorMessage(FormatValidationErrors(errors))
 		return m, nil
 	}
 
 	// Update the todo
-	m.inputState.editingTodo.Title = m.inputState.title
-	m.inputState.editingTodo.Description = m.inputState.description
+	m.inputState.editingTodo.Title = title
+	m.inputState.editingTodo.Description = description
 
 	if err := m.repository.UpdateTodo(*m.inputState.editingTodo); err != nil {
-		m.err = err
+		m.errorState.SetError(fmt.Errorf("failed to update todo: %w", err))
 		return m, nil
 	}
 
-	// Reload all todos to ensure proper categorization
+	// Success - reload and clear error
+	m.errorState.ClearError()
 	m.reloadTodos()
 	m.resetPagination()
 	m.inputState.ExitInputMode()
@@ -381,12 +422,22 @@ func (m Model) saveEditedTodo() (tea.Model, tea.Cmd) {
 
 // View implements tea.Model - renders the current view
 func (m Model) View() string {
-	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n\nPress q to quit.", m.err)
+	// Show global errors if not in input mode
+	if m.inputState.mode == NavigationMode {
+		if errorMsg := m.errorState.GetError(); errorMsg != "" {
+			errorDisplay := errorStyle.Render("⚠ " + errorMsg)
+			return lipgloss.JoinVertical(
+				lipgloss.Left,
+				m.renderHeader(),
+				errorDisplay,
+				"",
+				m.getCurrentViewContent(),
+				m.renderFooter(),
+			)
+		}
 	}
 
 	var content string
-
 	switch m.currentView {
 	case TodayView:
 		content = m.renderTodayView()

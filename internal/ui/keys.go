@@ -152,7 +152,7 @@ func (m Model) toggleCurrentTodo() Model {
 		if absoluteIndex < len(m.todayTodos) {
 			m.todayTodos[absoluteIndex].Toggle()
 			if err := m.repository.UpdateTodo(m.todayTodos[absoluteIndex]); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 			}
 		}
 	}
@@ -167,7 +167,7 @@ func (m Model) toggleCurrentGeneralTodo() Model {
 		if absoluteIndex < len(m.generalTodos) {
 			m.generalTodos[absoluteIndex].Toggle()
 			if err := m.repository.UpdateTodo(m.generalTodos[absoluteIndex]); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 			}
 		}
 	}
@@ -206,7 +206,7 @@ func (m Model) deleteCurrentTodo() (tea.Model, tea.Cmd) {
 		if absoluteIndex < len(m.todayTodos) {
 			todo := m.todayTodos[absoluteIndex]
 			if err := m.repository.DeleteTodo(todo.ID, todo.Date); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 				return m, nil
 			}
 
@@ -226,7 +226,7 @@ func (m Model) deleteCurrentGeneralTodo() (tea.Model, tea.Cmd) {
 		if absoluteIndex < len(m.generalTodos) {
 			todo := m.generalTodos[absoluteIndex]
 			if err := m.repository.DeleteTodo(todo.ID, nil); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 				return m, nil
 			}
 
@@ -293,7 +293,7 @@ func (m Model) toggleCurrentUpcomingTodo() Model {
 		if absoluteIndex < len(m.upcomingTodos) {
 			m.upcomingTodos[absoluteIndex].Toggle()
 			if err := m.repository.UpdateTodo(m.upcomingTodos[absoluteIndex]); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 			}
 		}
 	}
@@ -318,7 +318,7 @@ func (m Model) deleteCurrentUpcomingTodo() (tea.Model, tea.Cmd) {
 		if absoluteIndex < len(m.upcomingTodos) {
 			todo := m.upcomingTodos[absoluteIndex]
 			if err := m.repository.DeleteTodo(todo.ID, todo.Date); err != nil {
-				m.err = err
+				m.errorState.SetError(err)
 				return m, nil
 			}
 

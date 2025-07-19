@@ -275,15 +275,17 @@ func (m Model) renderInputForm() string {
 	if m.inputState.mode == AddTodoMode {
 		title = "➕ Add New Todo"
 	} else {
-		title = "✏️  Edit Todo"
+		title = "✏️ Edit Todo"
 	}
 
-	// Render title field
-	titleLabel := "Title:"
+	// Show any errors
+	errorDisplay := m.renderError()
+
+	// Render title field with character count
+	titleLabel := fmt.Sprintf("Title (%d/100):", len(m.inputState.title))
 	titleValue := m.inputState.title
 
 	if m.inputState.editField == 0 {
-		// Show cursor in title field
 		if m.inputState.cursor <= len(titleValue) {
 			titleValue = titleValue[:m.inputState.cursor] + "│" + titleValue[m.inputState.cursor:]
 		}
@@ -292,12 +294,11 @@ func (m Model) renderInputForm() string {
 		titleLabel = normalItemStyle.Render(titleLabel)
 	}
 
-	// Render description field
-	descLabel := "Description:"
+	// Render description field with character count
+	descLabel := fmt.Sprintf("Description (%d/500):", len(m.inputState.description))
 	descValue := m.inputState.description
 
 	if m.inputState.editField == 1 {
-		// Show cursor in description field
 		if m.inputState.cursor <= len(descValue) {
 			descValue = descValue[:m.inputState.cursor] + "│" + descValue[m.inputState.cursor:]
 		}
@@ -310,14 +311,39 @@ func (m Model) renderInputForm() string {
 	form := []string{
 		title,
 		"",
+		errorDisplay, // Show errors here
 		titleLabel,
 		"  " + titleValue,
 		"",
 		descLabel,
 		"  " + descValue,
 		"",
-		mutedStyle.Render("Press Tab to switch fields, Enter to save, Esc to cancel"),
+		mutedStyle.Render("Tab: switch field • Enter/Ctrl+S: save • Esc: cancel • Ctrl+A: select all"),
 	}
 
 	return baseStyle.Render(strings.Join(form, "\n"))
+}
+
+func (m Model) renderError() string {
+	errorMsg := m.errorState.GetError()
+	if errorMsg == "" {
+		return ""
+	}
+
+	return errorStyle.Render("⚠ "+errorMsg) + "\n\n"
+}
+
+func (m Model) getCurrentViewContent() string {
+	switch m.currentView {
+	case TodayView:
+		return m.renderTodayView()
+	case UpcomingView:
+		return m.renderUpcomingView()
+	case CalendarView:
+		return m.renderCalendarView()
+	case GeneralView:
+		return m.renderGeneralView()
+	default:
+		return ""
+	}
 }

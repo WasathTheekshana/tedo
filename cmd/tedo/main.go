@@ -13,9 +13,6 @@ func main() {
 	// Create the application model
 	model := ui.NewModel()
 
-	// Add some test data for development
-	model.AddTestData()
-
 	// Create the Bubble Tea program
 	p := tea.NewProgram(
 		model,

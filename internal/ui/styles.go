@@ -52,6 +52,10 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(errorColor).
 			Bold(true)
+
+	// Muted style for help text
+	mutedStyle = lipgloss.NewStyle().
+			Foreground(mutedColor)
 )
 
 // getViewName returns the display name for a view type

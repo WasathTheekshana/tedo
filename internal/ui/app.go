@@ -30,10 +30,11 @@ type Model struct {
 	repository  *storage.Repository
 
 	// View states
-	todayTodos   []models.Todo
-	generalTodos []models.Todo
-	selectedDate string // Currently selected date (YYYY-MM-DD)
-	cursor       int    // Current cursor position in lists
+	todayTodos    []models.Todo
+	generalTodos  []models.Todo
+	selectedDate  string        // Currently selected date (YYYY-MM-DD)
+	cursor        int           // Current cursor position in lists
+	calendarState CalendarState // Make sure this line exists
 
 	// Pagination
 	todayPage   int // Current page for today's todos
@@ -58,15 +59,16 @@ func NewModel() Model {
 	generalTodos, _ := repo.GetGeneralTodos()
 
 	return Model{
-		currentView:  TodayView,
-		repository:   repo,
-		todayTodos:   todayTodos,
-		generalTodos: generalTodos,
-		selectedDate: today,
-		cursor:       0,
-		todayPage:    0,
-		generalPage:  0,
-		inputState:   NewInputState(),
+		currentView:   TodayView,
+		repository:    repo,
+		todayTodos:    todayTodos,
+		generalTodos:  generalTodos,
+		selectedDate:  today,
+		cursor:        0,
+		calendarState: NewCalendarState(), // Make sure this line exists
+		todayPage:     0,
+		generalPage:   0,
+		inputState:    NewInputState(),
 	}
 }
 
@@ -184,13 +186,23 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputMode(msg)
 	}
 
-	// Global navigation keys
+	// Handle view-specific keys BEFORE global keys (this is the fix!)
+	switch m.currentView {
+	case TodayView:
+		return m.handleTodayViewKeys(msg)
+	case CalendarView:
+		return m.handleCalendarViewKeys(msg)
+	case GeneralView:
+		return m.handleGeneralViewKeys(msg)
+	}
+
+	// Global navigation keys (moved to the end)
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
-	case "tab", "l", "right":
+	case "tab":
 		return m.switchToNextView(), nil
-	case "shift+tab", "h", "left":
+	case "shift+tab":
 		return m.switchToPrevView(), nil
 	case "1":
 		m.currentView = TodayView
@@ -204,16 +216,6 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentView = GeneralView
 		m.cursor = 0
 		return m, nil
-	}
-
-	// Handle view-specific keys
-	switch m.currentView {
-	case TodayView:
-		return m.handleTodayViewKeys(msg)
-	case CalendarView:
-		return m.handleCalendarViewKeys(msg)
-	case GeneralView:
-		return m.handleGeneralViewKeys(msg)
 	}
 
 	return m, nil

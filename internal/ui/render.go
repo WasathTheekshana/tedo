@@ -36,6 +36,21 @@ func (m Model) renderFooter() string {
 		return footerStyle.Render(strings.Join(help, " • "))
 	}
 
+	// Different help for calendar view
+	if m.currentView == CalendarView {
+		help := []string{
+			"h/j/k/l: navigate",
+			"n/p: month",
+			"t: today",
+			"enter: view date",
+			"i: add",
+			"tab: switch view",
+			"q: quit",
+		}
+		return footerStyle.Render(strings.Join(help, " • "))
+	}
+
+	// Help for Today and General views
 	help := []string{
 		"j/k: navigate",
 		"h/l: switch tabs",
@@ -43,6 +58,7 @@ func (m Model) renderFooter() string {
 		"d: delete",
 		"e: edit",
 		"i: add",
+		"c: calendar",
 		"q: quit",
 	}
 
@@ -113,7 +129,20 @@ func (m Model) renderTodayView() string {
 
 // renderCalendarView renders the calendar view (placeholder for now)
 func (m Model) renderCalendarView() string {
-	return baseStyle.Render("📅 Calendar View\n\nComing soon! Use arrow keys to navigate dates.")
+	// If in input mode, show the input form
+	if m.inputState.mode != NavigationMode {
+		return m.renderInputForm()
+	}
+
+	calendar := m.renderCalendar()
+
+	// Add help text
+	help := []string{
+		"",
+		mutedStyle.Render("Navigation: h/j/k/l=move, n/p=month, t=today, enter=view date, i=add todo"),
+	}
+
+	return baseStyle.Render(calendar + strings.Join(help, "\n"))
 }
 
 // renderGeneralView renders the general todos view

@@ -43,6 +43,11 @@ var (
 
 	normalItemStyle = lipgloss.NewStyle()
 
+	// Accent style for dates with todos
+	accentStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
+
 	// Footer styles
 	footerStyle = lipgloss.NewStyle().
 			Foreground(mutedColor).

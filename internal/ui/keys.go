@@ -4,6 +4,14 @@ import tea "github.com/charmbracelet/bubbletea"
 
 // handleTodayViewKeys handles keys specific to today view
 func (m Model) handleTodayViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle tab switching first
+	switch msg.String() {
+	case "l", "right":
+		return m.switchToNextView(), nil
+	case "h", "left":
+		return m.switchToPrevView(), nil
+	}
+
 	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
 
 	switch msg.String() {
@@ -43,18 +51,72 @@ func (m Model) handleTodayViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.editCurrentTodo()
 	case "d":
 		return m.deleteCurrentTodo()
+	case "c":
+		// Press 'c' to go to calendar
+		m.currentView = CalendarView
+		return m, nil
 	}
 	return m, nil
 }
 
 // handleCalendarViewKeys handles keys specific to calendar view
 func (m Model) handleCalendarViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Placeholder - will implement in next task
+	// Handle calendar-specific navigation (these take priority over global keys)
+	switch msg.String() {
+	case "j", "down":
+		m.calendarState.moveCursor(1, 0)
+		return m, nil
+	case "k", "up":
+		m.calendarState.moveCursor(-1, 0)
+		return m, nil
+	case "h", "left":
+		m.calendarState.moveCursor(0, -1)
+		return m, nil
+	case "l", "right":
+		m.calendarState.moveCursor(0, 1)
+		return m, nil
+	case "n", ">":
+		m.calendarState.moveToNextMonth()
+		return m, nil
+	case "p", "<":
+		m.calendarState.moveToPrevMonth()
+		return m, nil
+	case "t":
+		m.calendarState.moveToToday()
+		return m, nil
+	case "enter":
+		// Switch to today view with selected date
+		m.selectedDate = m.calendarState.getSelectedDate()
+		m.todayTodos, _ = m.repository.GetTodosForDate(m.selectedDate)
+		m.currentView = TodayView
+		m.cursor = 0
+		m.todayPage = 0
+		return m, nil
+	case "i":
+		// Add todo for selected date
+		m.selectedDate = m.calendarState.getSelectedDate()
+		m.inputState.StartAddMode()
+		return m, nil
+	case "tab":
+		// Tab switches to next view
+		return m.switchToNextView(), nil
+	case "shift+tab":
+		// Shift+tab switches to previous view
+		return m.switchToPrevView(), nil
+	}
 	return m, nil
 }
 
 // handleGeneralViewKeys handles keys specific to general view
 func (m Model) handleGeneralViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle tab switching first
+	switch msg.String() {
+	case "l", "right":
+		return m.switchToNextView(), nil
+	case "h", "left":
+		return m.switchToPrevView(), nil
+	}
+
 	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
 
 	switch msg.String() {
@@ -94,6 +156,10 @@ func (m Model) handleGeneralViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.editCurrentGeneralTodo()
 	case "d":
 		return m.deleteCurrentGeneralTodo()
+	case "c":
+		// Press 'c' to go to calendar
+		m.currentView = CalendarView
+		return m, nil
 	}
 	return m, nil
 }

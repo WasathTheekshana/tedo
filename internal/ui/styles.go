@@ -68,6 +68,8 @@ func getViewName(view ViewType) string {
 	switch view {
 	case TodayView:
 		return "Today"
+	case UpcomingView:
+		return "Upcoming"
 	case CalendarView:
 		return "Calendar"
 	case GeneralView:

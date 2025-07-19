@@ -9,7 +9,8 @@ import (
 func (m Model) renderHeader() string {
 	var tabs []string
 
-	views := []ViewType{TodayView, CalendarView, GeneralView}
+	// Update to include all four views
+	views := []ViewType{TodayView, UpcomingView, CalendarView, GeneralView}
 
 	for _, view := range views {
 		name := getViewName(view)
@@ -39,21 +40,21 @@ func (m Model) renderFooter() string {
 	// Different help for calendar view
 	if m.currentView == CalendarView {
 		help := []string{
-			"h/j/k/l: navigate",
+			"h/j/k/l: navigate dates",
 			"n/p: month",
 			"t: today",
 			"enter: view date",
 			"i: add",
-			"tab: switch view",
+			"←/→: switch tabs",
 			"q: quit",
 		}
 		return footerStyle.Render(strings.Join(help, " • "))
 	}
 
-	// Help for Today and General views
+	// Help for Today, Upcoming, and General views
 	help := []string{
 		"j/k: navigate",
-		"h/l: switch tabs",
+		"←/→: switch tabs",
 		"x: toggle",
 		"d: delete",
 		"e: edit",
@@ -111,6 +112,69 @@ func (m Model) renderTodayView() string {
 		// Show absolute index
 		absoluteIndex := currentPage*TodosPerPage + i + 1
 		line := fmt.Sprintf("%s %s %d. %s", cursor, checkbox, absoluteIndex, todo.Title)
+		if todo.Description != "" {
+			line += fmt.Sprintf("\n      %s", todo.Description)
+		}
+
+		items = append(items, style.Render(line))
+	}
+
+	// Add pagination help if needed
+	if totalPages > 1 {
+		items = append(items, "")
+		items = append(items, mutedStyle.Render("Navigation: j/k=item, Ctrl+f/b=page"))
+	}
+
+	return baseStyle.Render(strings.Join(items, "\n"))
+}
+
+func (m Model) renderUpcomingView() string {
+	// If in input mode, show the input form
+	if m.inputState.mode != NavigationMode {
+		return m.renderInputForm()
+	}
+
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
+	if len(m.upcomingTodos) == 0 {
+		return baseStyle.Render("📅 Upcoming Todos\n\nNo upcoming todos!\n\nPress 'i' to add a new todo or 'c' for calendar.")
+	}
+
+	var items []string
+
+	// Header with pagination info
+	header := "📅 Upcoming Todos"
+	if totalPages > 1 {
+		header += fmt.Sprintf(" (Page %d/%d - %d total)", currentPage+1, totalPages, len(m.upcomingTodos))
+	} else {
+		header += fmt.Sprintf(" (%d todos)", len(m.upcomingTodos))
+	}
+	items = append(items, header+"\n")
+
+	for i, todo := range paginatedTodos {
+		cursor := " "
+		if i == m.cursor {
+			cursor = ">"
+		}
+
+		checkbox := "☐"
+		style := normalItemStyle
+		if todo.Completed {
+			checkbox = "✓"
+			style = completedItemStyle
+		}
+
+		if i == m.cursor {
+			style = selectedItemStyle
+		}
+
+		// Show date and absolute index
+		absoluteIndex := currentPage*TodosPerPage + i + 1
+		dateStr := ""
+		if todo.Date != nil {
+			dateStr = fmt.Sprintf(" (%s)", *todo.Date)
+		}
+		line := fmt.Sprintf("%s %s %d. %s%s", cursor, checkbox, absoluteIndex, todo.Title, dateStr)
 		if todo.Description != "" {
 			line += fmt.Sprintf("\n      %s", todo.Description)
 		}

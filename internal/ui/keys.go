@@ -4,14 +4,7 @@ import tea "github.com/charmbracelet/bubbletea"
 
 // handleTodayViewKeys handles keys specific to today view
 func (m Model) handleTodayViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle tab switching first
-	switch msg.String() {
-	case "l", "right":
-		return m.switchToNextView(), nil
-	case "h", "left":
-		return m.switchToPrevView(), nil
-	}
-
+	// Remove h/l for tab switching - now only hjkl for navigation
 	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
 
 	switch msg.String() {
@@ -61,7 +54,7 @@ func (m Model) handleTodayViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleCalendarViewKeys handles keys specific to calendar view
 func (m Model) handleCalendarViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle calendar-specific navigation (these take priority over global keys)
+	// Calendar uses hjkl for date navigation
 	switch msg.String() {
 	case "j", "down":
 		m.calendarState.moveCursor(1, 0)
@@ -97,26 +90,13 @@ func (m Model) handleCalendarViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.selectedDate = m.calendarState.getSelectedDate()
 		m.inputState.StartAddMode()
 		return m, nil
-	case "tab":
-		// Tab switches to next view
-		return m.switchToNextView(), nil
-	case "shift+tab":
-		// Shift+tab switches to previous view
-		return m.switchToPrevView(), nil
 	}
 	return m, nil
 }
 
 // handleGeneralViewKeys handles keys specific to general view
 func (m Model) handleGeneralViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle tab switching first
-	switch msg.String() {
-	case "l", "right":
-		return m.switchToNextView(), nil
-	case "h", "left":
-		return m.switchToPrevView(), nil
-	}
-
+	// Remove h/l for tab switching - now only hjkl for navigation
 	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
 
 	switch msg.String() {
@@ -252,6 +232,97 @@ func (m Model) deleteCurrentGeneralTodo() (tea.Model, tea.Cmd) {
 
 			// Reload todos and reset pagination
 			m.generalTodos, _ = m.repository.GetGeneralTodos()
+			m.resetPagination()
+		}
+	}
+	return m, nil
+}
+
+// handleUpcomingViewKeys handles keys specific to upcoming view
+func (m Model) handleUpcomingViewKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Remove h/l for tab switching - now only hjkl for navigation
+	paginatedTodos, currentPage, totalPages := m.getPaginatedTodos()
+
+	switch msg.String() {
+	case "j", "down":
+		if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos)-1 {
+			m.cursor++
+		} else if len(paginatedTodos) > 0 && m.cursor == len(paginatedTodos)-1 && currentPage < totalPages-1 {
+			m.upcomingPage++
+			m.cursor = 0
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		} else if m.cursor == 0 && currentPage > 0 {
+			m.upcomingPage--
+			newPaginatedTodos, _, _ := m.getPaginatedTodos()
+			m.cursor = len(newPaginatedTodos) - 1
+		}
+	case "ctrl+f", "page_down":
+		if currentPage < totalPages-1 {
+			m.upcomingPage++
+			m.cursor = 0
+		}
+	case "ctrl+b", "page_up":
+		if currentPage > 0 {
+			m.upcomingPage--
+			m.cursor = 0
+		}
+	case "x":
+		return m.toggleCurrentUpcomingTodo(), nil
+	case "i":
+		m.inputState.StartAddMode()
+		return m, nil
+	case "e":
+		return m.editCurrentUpcomingTodo()
+	case "d":
+		return m.deleteCurrentUpcomingTodo()
+	case "c":
+		m.currentView = CalendarView
+		return m, nil
+	}
+	return m, nil
+}
+
+// Add these functions to handle upcoming todos
+func (m Model) toggleCurrentUpcomingTodo() Model {
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.upcomingTodos) {
+			m.upcomingTodos[absoluteIndex].Toggle()
+			if err := m.repository.UpdateTodo(m.upcomingTodos[absoluteIndex]); err != nil {
+				m.err = err
+			}
+		}
+	}
+	return m
+}
+
+func (m Model) editCurrentUpcomingTodo() (tea.Model, tea.Cmd) {
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.upcomingTodos) {
+			m.inputState.StartEditMode(&m.upcomingTodos[absoluteIndex])
+		}
+	}
+	return m, nil
+}
+
+func (m Model) deleteCurrentUpcomingTodo() (tea.Model, tea.Cmd) {
+	paginatedTodos, _, _ := m.getPaginatedTodos()
+	if len(paginatedTodos) > 0 && m.cursor < len(paginatedTodos) {
+		absoluteIndex := m.getAbsoluteCursor()
+		if absoluteIndex < len(m.upcomingTodos) {
+			todo := m.upcomingTodos[absoluteIndex]
+			if err := m.repository.DeleteTodo(todo.ID, todo.Date); err != nil {
+				m.err = err
+				return m, nil
+			}
+
+			m.reloadTodos()
 			m.resetPagination()
 		}
 	}

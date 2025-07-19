@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -15,6 +16,7 @@ type ViewType int
 
 const (
 	TodayView ViewType = iota
+	UpcomingView
 	CalendarView
 	GeneralView
 )
@@ -31,14 +33,16 @@ type Model struct {
 
 	// View states
 	todayTodos    []models.Todo
+	upcomingTodos []models.Todo // Add upcoming todos
 	generalTodos  []models.Todo
-	selectedDate  string        // Currently selected date (YYYY-MM-DD)
-	cursor        int           // Current cursor position in lists
-	calendarState CalendarState // Make sure this line exists
+	selectedDate  string // Currently selected date (YYYY-MM-DD)
+	cursor        int    // Current cursor position in lists
+	calendarState CalendarState
 
 	// Pagination
-	todayPage   int // Current page for today's todos
-	generalPage int // Current page for general todos
+	todayPage    int // Current page for today's todos
+	upcomingPage int // Current page for upcoming todos
+	generalPage  int // Current page for general todos
 
 	// Input state
 	inputState InputState
@@ -56,20 +60,44 @@ func NewModel() Model {
 
 	// Load initial data
 	todayTodos, _ := repo.GetTodosForDate(today)
+	upcomingTodos := loadUpcomingTodos(repo, today)
 	generalTodos, _ := repo.GetGeneralTodos()
 
 	return Model{
 		currentView:   TodayView,
 		repository:    repo,
 		todayTodos:    todayTodos,
+		upcomingTodos: upcomingTodos,
 		generalTodos:  generalTodos,
 		selectedDate:  today,
 		cursor:        0,
-		calendarState: NewCalendarState(), // Make sure this line exists
+		calendarState: NewCalendarState(),
 		todayPage:     0,
+		upcomingPage:  0,
 		generalPage:   0,
 		inputState:    NewInputState(),
 	}
+}
+
+// loadUpcomingTodos loads all todos that are not for today (future dates)
+func loadUpcomingTodos(repo *storage.Repository, today string) []models.Todo {
+	// For now, we'll load todos from the next 30 days
+	// In a real app, you might want to scan the data directory
+	var upcomingTodos []models.Todo
+
+	todayTime, _ := time.Parse("2006-01-02", today)
+
+	for i := 1; i <= 30; i++ {
+		futureDate := todayTime.AddDate(0, 0, i)
+		futureDateStr := futureDate.Format("2006-01-02")
+
+		todos, err := repo.GetTodosForDate(futureDateStr)
+		if err == nil && len(todos) > 0 {
+			upcomingTodos = append(upcomingTodos, todos...)
+		}
+	}
+
+	return upcomingTodos
 }
 
 // getPaginatedTodos returns the todos for the current page
@@ -81,6 +109,9 @@ func (m Model) getPaginatedTodos() ([]models.Todo, int, int) {
 	case TodayView:
 		todos = m.todayTodos
 		currentPage = m.todayPage
+	case UpcomingView:
+		todos = m.upcomingTodos
+		currentPage = m.upcomingPage
 	case GeneralView:
 		todos = m.generalTodos
 		currentPage = m.generalPage
@@ -111,6 +142,8 @@ func (m Model) getAbsoluteCursor() int {
 	switch m.currentView {
 	case TodayView:
 		return m.todayPage*TodosPerPage + m.cursor
+	case UpcomingView:
+		return m.upcomingPage*TodosPerPage + m.cursor
 	case GeneralView:
 		return m.generalPage*TodosPerPage + m.cursor
 	default:
@@ -122,7 +155,6 @@ func (m Model) getAbsoluteCursor() int {
 func (m *Model) resetPagination() {
 	switch m.currentView {
 	case TodayView:
-		// Adjust page if current page is now empty
 		totalPages := (len(m.todayTodos) + TodosPerPage - 1) / TodosPerPage
 		if totalPages == 0 {
 			totalPages = 1
@@ -133,8 +165,18 @@ func (m *Model) resetPagination() {
 		if m.todayPage < 0 {
 			m.todayPage = 0
 		}
+	case UpcomingView:
+		totalPages := (len(m.upcomingTodos) + TodosPerPage - 1) / TodosPerPage
+		if totalPages == 0 {
+			totalPages = 1
+		}
+		if m.upcomingPage >= totalPages {
+			m.upcomingPage = totalPages - 1
+		}
+		if m.upcomingPage < 0 {
+			m.upcomingPage = 0
+		}
 	case GeneralView:
-		// Adjust page if current page is now empty
 		totalPages := (len(m.generalTodos) + TodosPerPage - 1) / TodosPerPage
 		if totalPages == 0 {
 			totalPages = 1
@@ -147,7 +189,7 @@ func (m *Model) resetPagination() {
 		}
 	}
 
-	// Reset cursor to 0 if it's out of bounds for current page
+	// Reset cursor if out of bounds
 	paginatedTodos, _, _ := m.getPaginatedTodos()
 	if m.cursor >= len(paginatedTodos) {
 		m.cursor = 0
@@ -155,6 +197,14 @@ func (m *Model) resetPagination() {
 			m.cursor = len(paginatedTodos) - 1
 		}
 	}
+}
+
+// reloadTodos reloads todos after changes
+func (m *Model) reloadTodos() {
+	today := models.TodayString()
+	m.todayTodos, _ = m.repository.GetTodosForDate(today)
+	m.upcomingTodos = loadUpcomingTodos(m.repository, today)
+	m.generalTodos, _ = m.repository.GetGeneralTodos()
 }
 
 // Init implements tea.Model
@@ -179,27 +229,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleKeyPress processes keyboard input
+// Update handleKeyPress to include UpcomingView
 func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle input mode first
 	if m.inputState.mode != NavigationMode {
 		return m.handleInputMode(msg)
 	}
 
-	// Handle view-specific keys BEFORE global keys (this is the fix!)
+	// Handle QUIT keys FIRST
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+
+	// Handle ARROW KEYS for menu/tab navigation ONLY
+	switch msg.String() {
+	case "left", "right":
+		if msg.String() == "right" {
+			return m.switchToNextView(), nil
+		} else {
+			return m.switchToPrevView(), nil
+		}
+	}
+
+	// Handle view-specific keys (these will use hjkl)
 	switch m.currentView {
 	case TodayView:
 		return m.handleTodayViewKeys(msg)
+	case UpcomingView:
+		return m.handleUpcomingViewKeys(msg)
 	case CalendarView:
 		return m.handleCalendarViewKeys(msg)
 	case GeneralView:
 		return m.handleGeneralViewKeys(msg)
 	}
 
-	// Global navigation keys (moved to the end)
+	// Handle remaining global navigation keys
 	switch msg.String() {
-	case "q", "ctrl+c":
-		return m, tea.Quit
 	case "tab":
 		return m.switchToNextView(), nil
 	case "shift+tab":
@@ -209,10 +275,14 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case "2":
-		m.currentView = CalendarView
+		m.currentView = UpcomingView
 		m.cursor = 0
 		return m, nil
 	case "3":
+		m.currentView = CalendarView
+		m.cursor = 0
+		return m, nil
+	case "4":
 		m.currentView = GeneralView
 		m.cursor = 0
 		return m, nil
@@ -223,7 +293,10 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleInputMode handles keys when in input mode
 func (m Model) handleInputMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle quit keys even in input mode
 	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
 	case "esc":
 		m.inputState.ExitInputMode()
 		return m, nil
@@ -260,6 +333,12 @@ func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
 	var date *string
 	if m.currentView == TodayView {
 		date = &m.selectedDate
+	} else if m.currentView == CalendarView {
+		selectedDate := m.calendarState.getSelectedDate()
+		date = &selectedDate
+	} else if m.currentView == UpcomingView {
+		// For upcoming view, ask which date or use selected date
+		date = &m.selectedDate
 	}
 	// For GeneralView, date remains nil
 
@@ -270,13 +349,8 @@ func (m Model) saveNewTodo() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Reload the appropriate todo list
-	if date != nil {
-		m.todayTodos, _ = m.repository.GetTodosForDate(*date)
-	} else {
-		m.generalTodos, _ = m.repository.GetGeneralTodos()
-	}
-
+	// Reload all todos to ensure proper categorization
+	m.reloadTodos()
 	m.resetPagination()
 	m.inputState.ExitInputMode()
 	return m, nil
@@ -298,13 +372,8 @@ func (m Model) saveEditedTodo() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Reload the appropriate todo list
-	if m.inputState.editingTodo.IsGeneral() {
-		m.generalTodos, _ = m.repository.GetGeneralTodos()
-	} else {
-		m.todayTodos, _ = m.repository.GetTodosForDate(*m.inputState.editingTodo.Date)
-	}
-
+	// Reload all todos to ensure proper categorization
+	m.reloadTodos()
 	m.resetPagination()
 	m.inputState.ExitInputMode()
 	return m, nil
@@ -321,6 +390,8 @@ func (m Model) View() string {
 	switch m.currentView {
 	case TodayView:
 		content = m.renderTodayView()
+	case UpcomingView:
+		content = m.renderUpcomingView()
 	case CalendarView:
 		content = m.renderCalendarView()
 	case GeneralView:
@@ -335,17 +406,19 @@ func (m Model) View() string {
 	)
 }
 
-// Helper methods for view switching
+// Update view switching
 func (m Model) switchToNextView() Model {
 	switch m.currentView {
 	case TodayView:
+		m.currentView = UpcomingView
+	case UpcomingView:
 		m.currentView = CalendarView
 	case CalendarView:
 		m.currentView = GeneralView
 	case GeneralView:
 		m.currentView = TodayView
 	}
-	m.cursor = 0 // Reset cursor when switching views
+	m.cursor = 0
 	return m
 }
 
@@ -353,11 +426,13 @@ func (m Model) switchToPrevView() Model {
 	switch m.currentView {
 	case TodayView:
 		m.currentView = GeneralView
-	case CalendarView:
+	case UpcomingView:
 		m.currentView = TodayView
+	case CalendarView:
+		m.currentView = UpcomingView
 	case GeneralView:
 		m.currentView = CalendarView
 	}
-	m.cursor = 0 // Reset cursor when switching views
+	m.cursor = 0
 	return m
 }
